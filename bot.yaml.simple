@@ -1,0 +1,6 @@
+tgbot: xxx # bot token
+mode:
+  debug: false
+botapi: "https://api.telegram.org/bot%s/%s"
+tgchan: "@chanid" # 频道name
+tguser: userid # 用户id
