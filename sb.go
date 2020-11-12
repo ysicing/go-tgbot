@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ysicing/ext/logger"
 	"github.com/ysicing/ext/utils/exfile"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -20,18 +19,18 @@ import (
 )
 
 var (
-	msgtype string
-	msgvalue string
-	msgchan bool
-	Version string
-	BuildDate string
+	msgtype       string
+	msgvalue      string
+	msgchan       bool
+	Version       string
+	BuildDate     string
 	GitCommitHash string
 )
 
 var rootCmd = &cobra.Command{
-	Use:                        "sb",
-	Short:                      "simple bot",
-	Long:                       "一个 Telegram 推送的小工具，用于调用 Bot API 发送告警等",
+	Use:     "sb",
+	Short:   "simple bot",
+	Long:    "一个 Telegram 推送的小工具，用于调用 Bot API 发送告警等",
 	Version: fmt.Sprintf("%s %s %s", Version, GitCommitHash, BuildDate),
 	Run: func(cmd *cobra.Command, args []string) {
 		var wg sync.WaitGroup
@@ -47,17 +46,14 @@ var rootCmd = &cobra.Command{
 
 // NewBot new bot
 func NewBot() *tgbotapi.BotAPI {
-	client := &http.Client{}
-
 	endpoint := tgbotapi.APIEndpoint
 	getep := viper.GetString("botapi")
 	if len(getep) != 0 && strings.HasPrefix(getep, "http") {
 		endpoint = getep
 	}
 
-	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint(viper.GetString("tgbot"), endpoint, client)
+	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint(viper.GetString("tgbot"), endpoint)
 	if err != nil {
-
 		return nil
 	}
 	bot.Debug = viper.GetBool("mode.debug")
@@ -78,7 +74,7 @@ tgchan: "@chanid" # 频道name
 tguser: userid # 用户id
 `
 		exfile.WriteFile(cfgpath, defaultcfg)
-		logger.Slog.Exit0("需要修改配置文件")
+		logger.Slog.Fatal("需要修改配置文件")
 	}
 	viper.SetConfigFile(cfgpath)
 	// viper.AutomaticEnv()
@@ -93,7 +89,7 @@ tguser: userid # 用户id
 }
 
 // SendMsg send msg
-func SendMsg(msg string,wg *sync.WaitGroup, chanmsg ...bool) {
+func SendMsg(msg string, wg *sync.WaitGroup, chanmsg ...bool) {
 	defer wg.Done()
 	botapi := NewBot()
 	var err error
@@ -107,7 +103,7 @@ func SendMsg(msg string,wg *sync.WaitGroup, chanmsg ...bool) {
 		_, err = botapi.Send(tgmsg)
 	}
 	if err != nil {
-		logger.Slog.Errorf("send msg err: %v, msg: %v", err, msg)
+		logger.Slog.Fatalf("send msg err: %v, msg: %v", err, msg)
 	}
 }
 
@@ -119,12 +115,12 @@ func SendFile(filepath string, wg *sync.WaitGroup) {
 	tgfile := tgbotapi.NewDocumentUpload(tguser, filepath)
 	_, err = botapi.Send(tgfile)
 	if err != nil {
-		logger.Slog.Errorf("send msg err: %v, msg: %v", err, filepath)
+		logger.Slog.Fatalf("send msg err: %v, msg: %v", err, filepath)
 	}
 }
 
 func init() {
-	logcfg := logger.LogConfig{Simple: true}
+	logcfg := logger.Config{Simple: true, ConsoleOnly: true}
 	logger.InitLogger(&logcfg)
 	initConfig()
 	rootCmd.PersistentFlags().StringVar(&msgtype, "type", "msg", "msg或者file，默认msg")
@@ -135,6 +131,6 @@ func init() {
 func main() {
 	err := rootCmd.Execute()
 	if err != nil {
-		logger.Slog.Exit0("执行err")
+		logger.Slog.Fatalf("执行失败: %v", err)
 	}
 }
