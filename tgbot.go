@@ -28,7 +28,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "sb",
+	Use:     "bot",
 	Short:   "simple bot",
 	Long:    "一个 Telegram 推送的小工具，用于调用 Bot API 发送告警等",
 	Version: fmt.Sprintf("%s %s %s", Version, GitCommitHash, BuildDate),
