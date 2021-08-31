@@ -5,17 +5,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/ysicing/ext/logger"
-	"github.com/ysicing/ext/utils/exfile"
 	"os"
-	"strings"
 	"sync"
 
+	"github.com/ergoapi/util/file"
+	"github.com/ergoapi/util/zos"
+	"github.com/ergoapi/zlog"
+	"github.com/spf13/cobra"
+
 	"github.com/fsnotify/fsnotify"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/spf13/viper"
-	"github.com/ysicing/ext/utils/exos"
 )
 
 var (
@@ -33,6 +32,11 @@ var rootCmd = &cobra.Command{
 	Long:    "一个 Telegram 推送的小工具，用于调用 Bot API 发送告警等",
 	Version: fmt.Sprintf("%s %s %s", Version, GitCommitHash, BuildDate),
 	Run: func(cmd *cobra.Command, args []string) {
+		bot, err := NewBot(viper.GetString("token"), viper.GetString("endpoint"))
+		if err != nil {
+			zlog.Error("bot init err: %v", err)
+			return
+		}
 		var wg sync.WaitGroup
 		wg.Add(1)
 		if msgtype == "msg" {
@@ -44,28 +48,12 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-// NewBot new bot
-func NewBot() *tgbotapi.BotAPI {
-	endpoint := tgbotapi.APIEndpoint
-	getep := viper.GetString("botapi")
-	if len(getep) != 0 && strings.HasPrefix(getep, "http") {
-		endpoint = getep
-	}
-
-	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint(viper.GetString("tgbot"), endpoint)
-	if err != nil {
-		return nil
-	}
-	bot.Debug = viper.GetBool("mode.debug")
-	return bot
-}
-
 func initConfig() {
 	cfgpath := "./bot.yaml"
-	if exos.IsLinux() {
+	if zos.IsLinux() {
 		cfgpath = "/conf/bot.yaml"
 	}
-	if !exfile.CheckFileExistsv2(cfgpath) {
+	if !file.CheckFileExists(cfgpath) {
 		defaultcfg := `tgbot: xxx # bot token
 mode:
   debug: false
@@ -73,8 +61,8 @@ botapi: "https://api.telegram.org/bot%s/%s"
 tgchan: "@chanid" # 频道name
 tguser: userid # 用户id
 `
-		exfile.WriteFile(cfgpath, defaultcfg)
-		logger.Slog.Fatal("需要修改配置文件")
+		file.Writefile(cfgpath, defaultcfg)
+		zlog.Fatal("需要修改配置文件")
 	}
 	viper.SetConfigFile(cfgpath)
 	// viper.AutomaticEnv()
@@ -84,7 +72,7 @@ tguser: userid # 用户id
 	// reload
 	viper.WatchConfig()
 	viper.OnConfigChange(func(in fsnotify.Event) {
-		logger.Slog.Debug("config changed: ", in.Name)
+		zlog.Debug("config changed: ", in.Name)
 	})
 }
 
@@ -103,7 +91,7 @@ func SendMsg(msg string, wg *sync.WaitGroup, chanmsg ...bool) {
 		_, err = botapi.Send(tgmsg)
 	}
 	if err != nil {
-		logger.Slog.Fatalf("send msg err: %v, msg: %v", err, msg)
+		zlog.Error("send msg err: %v, msg: %v", err, msg)
 	}
 }
 
@@ -115,13 +103,13 @@ func SendFile(filepath string, wg *sync.WaitGroup) {
 	tgfile := tgbotapi.NewDocumentUpload(tguser, filepath)
 	_, err = botapi.Send(tgfile)
 	if err != nil {
-		logger.Slog.Fatalf("send msg err: %v, msg: %v", err, filepath)
+		zlog.Error("send msg err: %v, msg: %v", err, filepath)
 	}
 }
 
 func init() {
-	logcfg := logger.Config{Simple: true, ConsoleOnly: true}
-	logger.InitLogger(&logcfg)
+	logcfg := zlog.Config{Simple: true, WriteLog: false, ServiceName: "tgbot"}
+	zlog.InitZlog(&logcfg)
 	initConfig()
 	rootCmd.PersistentFlags().StringVar(&msgtype, "type", "msg", "msg或者file，默认msg")
 	rootCmd.PersistentFlags().StringVar(&msgvalue, "c", "simple bot", "msg信息或者文件路径")
@@ -131,6 +119,6 @@ func init() {
 func main() {
 	err := rootCmd.Execute()
 	if err != nil {
-		logger.Slog.Fatalf("执行失败: %v", err)
+		zlog.Error("执行失败: %v", err)
 	}
 }
