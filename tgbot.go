@@ -15,6 +15,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	"github.com/ysicing/sb/api"
 )
 
 var (
@@ -32,7 +33,7 @@ var rootCmd = &cobra.Command{
 	Long:    "一个 Telegram 推送的小工具，用于调用 Bot API 发送告警等",
 	Version: fmt.Sprintf("%s %s %s", Version, GitCommitHash, BuildDate),
 	Run: func(cmd *cobra.Command, args []string) {
-		bot, err := NewBot(viper.GetString("token"), viper.GetString("endpoint"))
+		bot, err := api.NewBot(viper.GetString("token"), viper.GetString("endpoint"))
 		if err != nil {
 			zlog.Error("bot init err: %v", err)
 			return
@@ -40,9 +41,11 @@ var rootCmd = &cobra.Command{
 		var wg sync.WaitGroup
 		wg.Add(1)
 		if msgtype == "msg" {
-			SendMsg(msgvalue, &wg, msgchan)
+			SendMsg(msgvalue, bot, &wg, msgchan)
+		} else if msgtype == "file" {
+			SendFile(msgvalue, bot, &wg)
 		} else {
-			SendFile(msgvalue, &wg)
+			SendImage(msgvalue, bot, &wg)
 		}
 		wg.Wait()
 	},
@@ -54,10 +57,10 @@ func initConfig() {
 		cfgpath = "/conf/bot.yaml"
 	}
 	if !file.CheckFileExists(cfgpath) {
-		defaultcfg := `tgbot: xxx # bot token
+		defaultcfg := `token: xxx # bot token
 mode:
   debug: false
-botapi: "https://api.telegram.org/bot%s/%s"
+endpoint: "https://api.telegram.org/bot%s/%s"
 tgchan: "@chanid" # 频道name
 tguser: userid # 用户id
 `
@@ -77,33 +80,49 @@ tguser: userid # 用户id
 }
 
 // SendMsg send msg
-func SendMsg(msg string, wg *sync.WaitGroup, chanmsg ...bool) {
+func SendMsg(msg string, botapi *api.TgApi, wg *sync.WaitGroup, chanmsg ...bool) {
 	defer wg.Done()
-	botapi := NewBot()
-	var err error
 	if len(chanmsg) > 0 && chanmsg[0] {
-		tgchan := viper.GetString("tgchan")
-		tgmsg := tgbotapi.NewMessageToChannel(tgchan, msg)
-		_, err = botapi.Send(tgmsg)
+		// tgchan := viper.GetString("tgchan")
+
 	} else {
 		tguser := viper.GetInt64("tguser")
-		tgmsg := tgbotapi.NewMessage(tguser, msg)
-		_, err = botapi.Send(tgmsg)
-	}
-	if err != nil {
-		zlog.Error("send msg err: %v, msg: %v", err, msg)
+		err := botapi.SendMsg(msg, tguser, true)
+		if err != nil {
+			zlog.Error("send msg err: %v", err)
+		}
 	}
 }
 
-func SendFile(filepath string, wg *sync.WaitGroup) {
+func SendFile(filepath string, botapi *api.TgApi, wg *sync.WaitGroup) {
 	defer wg.Done()
-	botapi := NewBot()
-	var err error
 	tguser := viper.GetInt64("tguser")
-	tgfile := tgbotapi.NewDocumentUpload(tguser, filepath)
-	_, err = botapi.Send(tgfile)
-	if err != nil {
-		zlog.Error("send msg err: %v, msg: %v", err, filepath)
+	if len(filepath) != 0 {
+		info, err := os.Stat(filepath)
+		if err != nil {
+			zlog.Error("file stat err: %v", err)
+			return
+		}
+		err = botapi.SendFile(filepath, info.Name(), "", info.Name(), tguser)
+		if err != nil {
+			zlog.Error("failed to send file: %v", err)
+		}
+	}
+}
+
+func SendImage(filepath string, botapi *api.TgApi, wg *sync.WaitGroup) {
+	defer wg.Done()
+	tguser := viper.GetInt64("tguser")
+	if len(filepath) != 0 {
+		info, err := os.Stat(filepath)
+		if err != nil {
+			zlog.Error("file stat err: %v", err)
+			return
+		}
+		err = botapi.SendImage(filepath, info.Name(), tguser)
+		if err != nil {
+			zlog.Error("failed to send file: %v", err)
+		}
 	}
 }
 
